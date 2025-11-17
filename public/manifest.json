@@ -1,0 +1,27 @@
+{
+  "name": "Sistema de Chamados",
+  "short_name": "Chamados",
+  "description": "Sistema de abertura e gerenciamento de chamados",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#dc2626",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logogont.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logogont.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "lang": "pt-BR",
+  "dir": "ltr"
+}
