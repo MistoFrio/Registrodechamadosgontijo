@@ -1,6 +1,6 @@
-# Sistema de Chamados - PWA com Notificações Push
+# Sistema de Chamados - PWA
 
-Sistema completo de abertura de chamados desenvolvido em Next.js, configurado como PWA com suporte a notificações push via Firebase Cloud Messaging.
+Sistema completo de abertura de chamados desenvolvido em Next.js, configurado como PWA (Progressive Web App).
 
 ## Arquitetura do Projeto
 
@@ -16,13 +16,12 @@ project/
 │   └── globals.css           # Estilos globais
 ├── lib/
 │   ├── supabase.ts           # Export principal do cliente Supabase
-│   ├── firebase.ts           # Configuração Firebase e FCM
+│   ├── service-worker.ts     # Registro do Service Worker
 │   └── utils/
 │       └── supabase-client.ts # Cliente Supabase com validação
 ├── public/
 │   ├── manifest.json         # Manifest da PWA
-│   ├── sw.js                 # Service Worker principal
-│   └── firebase-messaging-sw.js # Service Worker do Firebase
+│   └── sw.js                 # Service Worker principal
 ├── .env.local                # Variáveis de ambiente
 └── next.config.js            # Configuração do Next.js
 ```
@@ -31,44 +30,38 @@ project/
 
 ### 1. Configurar Variáveis de Ambiente
 
-Edite o arquivo `.env.local` e adicione suas credenciais:
+#### Desenvolvimento Local
+
+Crie um arquivo `.env.local` na raiz do projeto e adicione suas credenciais:
 
 ```env
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key_aqui
-
-# Firebase Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=sua_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=seu-projeto.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=seu-projeto-id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=seu-projeto.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=seu_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=seu_app_id
-NEXT_PUBLIC_FIREBASE_VAPID_KEY=sua_vapid_key
 ```
 
-### 2. Configurar Firebase Cloud Messaging
+#### Produção (Vercel, Netlify, etc)
 
-1. Acesse o [Console do Firebase](https://console.firebase.google.com/)
-2. Crie um novo projeto ou selecione um existente
-3. Navegue até **Project Settings > Cloud Messaging**
-4. Copie suas credenciais Web para o `.env.local`
-5. Gere um par de chaves Web Push (VAPID) em **Cloud Messaging > Web configuration**
-6. Atualize o arquivo `public/firebase-messaging-sw.js` com suas credenciais:
+**IMPORTANTE:** Configure as variáveis de ambiente na plataforma de hospedagem:
 
-```javascript
-const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "seu-projeto.firebaseapp.com",
-  projectId: "seu-projeto-id",
-  storageBucket: "seu-projeto.appspot.com",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SEU_APP_ID"
-};
-```
+**Vercel:**
+1. Acesse o projeto no [Vercel Dashboard](https://vercel.com/dashboard)
+2. Vá em **Settings** > **Environment Variables**
+3. Adicione as variáveis do Supabase com o prefixo `NEXT_PUBLIC_`
+4. Faça um novo deploy após adicionar as variáveis
 
-### 3. Banco de Dados Supabase
+**Netlify:**
+1. Acesse o projeto no [Netlify Dashboard](https://app.netlify.com)
+2. Vá em **Site settings** > **Environment variables**
+3. Adicione as variáveis do Supabase
+4. Faça um novo deploy após adicionar as variáveis
+
+**Outras plataformas:**
+Configure as variáveis de ambiente através do painel administrativo da plataforma de hospedagem.
+
+⚠️ **ATENÇÃO:** Sem essas variáveis configuradas, o sistema não conseguirá conectar ao Supabase e você verá erros como `placeholder.supabase.co`.
+
+### 2. Banco de Dados Supabase
 
 O banco de dados já foi criado automaticamente com as seguintes tabelas:
 
@@ -80,14 +73,7 @@ O banco de dados já foi criado automaticamente com as seguintes tabelas:
 - `created_at` (timestamptz) - Data de criação
 - `updated_at` (timestamptz) - Data de atualização
 
-#### Tabela `push_tokens`
-- `id` (uuid) - Identificador único
-- `token` (text, unique) - Token FCM
-- `device_info` (text) - Informações do dispositivo
-- `created_at` (timestamptz) - Data de registro
-- `updated_at` (timestamptz) - Data de atualização
-
-### 4. Ícones da PWA
+### 3. Ícones da PWA
 
 Crie os seguintes ícones e coloque na pasta `public/`:
 
@@ -109,11 +95,12 @@ Formulário simples para abertura de chamados:
 ### Página Administrativa (/admin)
 
 Dashboard completo com:
-- Registro de token FCM para notificações push
 - Lista de todos os chamados
 - Status visual com badges coloridos
 - Atualização manual da lista
 - Instruções de instalação da PWA
+- Estatísticas e gráficos
+- Base de conhecimento para IA
 
 ## Funcionalidades da PWA
 
@@ -131,29 +118,9 @@ Dashboard completo com:
 - Clique no menu (três linhas)
 - Selecione "Instalar"
 
-### Notificações Push
-
-1. Acesse a página `/admin`
-2. Clique em "Ativar Notificações"
-3. Permita notificações no navegador
-4. O token FCM será registrado automaticamente
-5. Agora você receberá notificações de novos chamados
-
 ## Integração de Backend
 
-Este frontend está preparado para integração com Edge Functions do Supabase. Para enviar notificações:
-
-### Exemplo de Edge Function (não incluída)
-
-```typescript
-// Edge Function para enviar notificação ao criar ticket
-import { createClient } from '@supabase/supabase-js'
-import * as admin from 'firebase-admin'
-
-// Inicializar Firebase Admin SDK
-// Enviar notificação para todos os tokens registrados
-// quando um novo ticket for criado
-```
+Este frontend está preparado para integração com Edge Functions do Supabase para funcionalidades adicionais.
 
 ## Desenvolvimento
 
@@ -185,14 +152,12 @@ npm start
 - **Tailwind CSS** - Estilização
 - **Shadcn/UI** - Componentes de UI
 - **Supabase** - Backend e banco de dados
-- **Firebase Cloud Messaging** - Notificações push
 - **Service Workers** - Funcionalidade offline e background
 
 ### Segurança
 - RLS (Row Level Security) habilitado no Supabase
 - Validação de formulários no frontend
-- Tokens FCM armazenados com segurança
-- Permissões de notificação explícitas
+- Autenticação de administrador
 
 ### Performance
 - Static site generation
@@ -215,18 +180,16 @@ npm start
 
 ## Próximos Passos
 
-Para implementar o backend completo:
+Para melhorar o sistema:
 
-1. Criar Edge Function para enviar notificações quando um ticket for criado
-2. Adicionar sistema de autenticação para a página admin
-3. Implementar atualização de status de tickets
-4. Adicionar filtros e busca na lista de tickets
-5. Configurar rate limiting para o formulário público
-6. Implementar logs e analytics
+1. Adicionar sistema de autenticação mais robusto para a página admin
+2. Implementar filtros e busca avançada na lista de tickets
+3. Configurar rate limiting para o formulário público
+4. Implementar logs e analytics
+5. Adicionar exportação de relatórios em PDF
 
 ## Suporte
 
 Para questões técnicas:
 - Documentação Supabase: https://supabase.com/docs
-- Documentação Firebase: https://firebase.google.com/docs
 - Documentação Next.js: https://nextjs.org/docs

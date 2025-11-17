@@ -8,8 +8,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  Bell,
-  BellOff,
   CheckCircle2,
   AlertCircle,
   Clock,
@@ -33,20 +31,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { supabase, Ticket } from '@/lib/supabase';
-import {
-  registerServiceWorker,
-  requestNotificationPermission
-} from '@/lib/firebase';
+import { registerServiceWorker } from '@/lib/service-worker';
 
 export default function AdminPage() {
   const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [registering, setRegistering] = useState(false);
-  const [notificationStatus, setNotificationStatus] = useState<string>('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
@@ -261,57 +253,6 @@ export default function AdminPage() {
     loadTickets();
     loadKnowledgeBase();
   }, []);
-
-  // Verificar status de notificação
-  useEffect(() => {
-    if ('Notification' in window) {
-      setNotificationStatus(Notification.permission);
-    }
-  }, []);
-
-  // Registrar token FCM
-  const handleRegisterPushToken = async () => {
-    setRegistering(true);
-    setError('');
-
-    try {
-      // Solicitar permissão e obter token
-      const token = await requestNotificationPermission();
-
-      if (!token) {
-        throw new Error('Não foi possível obter o token de notificação');
-      }
-
-      setFcmToken(token);
-
-      // Obter informações do dispositivo
-      const deviceInfo = `${navigator.userAgent} - ${new Date().toISOString()}`;
-
-      // Salvar token no Supabase
-      const { error: insertError } = await supabase()
-        .from('push_tokens')
-        .upsert([
-          {
-            token: token,
-            device_info: deviceInfo
-          }
-        ], {
-          onConflict: 'token'
-        });
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      setNotificationStatus('granted');
-      alert('Token de notificação registrado com sucesso!');
-    } catch (err: any) {
-      console.error('Erro ao registrar token:', err);
-      setError('Erro ao registrar token de notificação. Verifique as permissões do navegador.');
-    } finally {
-      setRegistering(false);
-    }
-  };
 
   // Formatar data
   const formatDate = (dateString: string) => {
@@ -922,82 +863,25 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Notification Card */}
+        {/* Instruções PWA */}
         <Card className="mb-8 shadow-lg border-red-100">
           <CardHeader className="bg-gradient-to-r from-red-600 to-red-700 text-white">
             <CardTitle className="flex items-center gap-2">
-              <Bell className="w-6 h-6" />
-              Configuração de Notificações Push
+              <CheckCircle2 className="w-6 h-6" />
+              Instalar como Aplicativo (PWA)
             </CardTitle>
             <CardDescription className="text-red-50">
-              Registre este dispositivo para receber notificações de novos chamados
+              Instale este sistema como aplicativo no seu dispositivo
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="flex flex-col gap-4">
-              {/* Status de Permissão */}
-              <div className="flex items-center gap-2">
-                {notificationStatus === 'granted' ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                    <span className="text-green-700 font-medium">
-                      Notificações ativadas
-                    </span>
-                  </>
-                ) : notificationStatus === 'denied' ? (
-                  <>
-                    <BellOff className="w-5 h-5 text-red-600" />
-                    <span className="text-red-700 font-medium">
-                      Notificações bloqueadas
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="w-5 h-5 text-yellow-600" />
-                    <span className="text-yellow-700 font-medium">
-                      Notificações não configuradas
-                    </span>
-                  </>
-                )}
-              </div>
-
-              {/* FCM Token */}
-              {fcmToken && (
-                <div className="p-3 bg-gray-50 rounded-md">
-                  <p className="text-xs text-gray-600 mb-1">Token FCM:</p>
-                  <p className="text-xs font-mono break-all text-gray-800">
-                    {fcmToken}
-                  </p>
-                </div>
-              )}
-
-              {/* Botão de Registro */}
-              <Button
-                onClick={handleRegisterPushToken}
-                disabled={registering}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {registering ? (
-                  <>
-                    <span className="animate-pulse">Registrando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Bell className="w-4 h-4 mr-2" />
-                    {notificationStatus === 'granted' ? 'Atualizar Token' : 'Ativar Notificações'}
-                  </>
-                )}
-              </Button>
-
-              {/* Instruções */}
-              <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
-                <p className="font-medium mb-1">Como instalar a PWA:</p>
-                <ul className="list-disc list-inside space-y-1 text-xs">
-                  <li>No Chrome/Edge: Clique no ícone de instalação na barra de endereço</li>
-                  <li>No Safari (iOS): Toque em "Compartilhar" e depois "Adicionar à Tela de Início"</li>
-                  <li>No Firefox: Clique no menu e selecione "Instalar"</li>
-                </ul>
-              </div>
+            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
+              <p className="font-medium mb-1">Como instalar a PWA:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>No Chrome/Edge: Clique no ícone de instalação na barra de endereço</li>
+                <li>No Safari (iOS): Toque em "Compartilhar" e depois "Adicionar à Tela de Início"</li>
+                <li>No Firefox: Clique no menu e selecione "Instalar"</li>
+              </ul>
             </div>
           </CardContent>
         </Card>

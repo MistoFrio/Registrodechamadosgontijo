@@ -12,7 +12,7 @@ import { Ticket, AlertCircle, CheckCircle2, ListOrdered, Bot, Sparkles, X, Send,
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/lib/supabase';
-import { registerServiceWorker } from '@/lib/firebase';
+import { registerServiceWorker } from '@/lib/service-worker';
 
 export default function Home() {
   const [email, setEmail] = useState('');
