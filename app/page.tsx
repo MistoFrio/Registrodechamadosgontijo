@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,11 @@ export default function Home() {
   const [queueMessage, setQueueMessage] = useState('');
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const [queueAhead, setQueueAhead] = useState<string[]>([]);
+  const [queueList, setQueueList] = useState<
+    Array<{ id: string; email: string; status: string; created_at: string }>
+  >([]);
+  const [queueListLoading, setQueueListLoading] = useState(true);
+  const [queueListError, setQueueListError] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState('');
   const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -53,6 +58,35 @@ export default function Home() {
   useEffect(() => {
     registerServiceWorker();
   }, []);
+
+  const fetchQueueList = useCallback(async () => {
+    setQueueListLoading(true);
+    setQueueListError('');
+    try {
+      const { data, error: fetchError } = await supabase()
+        .from('tickets')
+        .select('id,email,status,created_at')
+        .eq('status', 'aberto')
+        .order('created_at', { ascending: true });
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      setQueueList(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar fila:', err);
+      setQueueListError('Não foi possível carregar a fila no momento.');
+    } finally {
+      setQueueListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchQueueList();
+    const interval = setInterval(fetchQueueList, 15000);
+    return () => clearInterval(interval);
+  }, [fetchQueueList]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +258,8 @@ export default function Home() {
       if (fetchError) {
         throw fetchError;
       }
+
+      setQueueList(data || []);
 
       if (!data || data.length === 0) {
         setQueueMessage('Não há chamados em aberto no momento.');
@@ -590,6 +626,88 @@ export default function Home() {
               </form>
             </CardContent>
           </Card>
+
+          {/* Queue Always Visible */}
+          <div className="mt-8 sm:mt-10">
+            <Card className="border-gray-200 shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-xl">Fila em tempo real</CardTitle>
+                <CardDescription>
+                  Lista atualizada automaticamente a cada 15 segundos
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {queueListLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div
+                        key={`queue-skeleton-${index}`}
+                        className="h-12 rounded-md bg-gray-100 animate-pulse"
+                      />
+                    ))}
+                  </div>
+                ) : queueListError ? (
+                  <Alert className="border-red-200 bg-red-50">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-red-800">
+                      {queueListError}
+                    </AlertDescription>
+                  </Alert>
+                ) : queueList.length === 0 ? (
+                  <div className="text-center text-gray-600 text-sm">
+                    Nenhum chamado em aberto agora.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <ol className="space-y-2">
+                      {queueList.map((ticket, index) => (
+                        <li
+                          key={ticket.id}
+                          className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-500 font-semibold">
+                              {index + 1}º
+                            </span>
+                            <div>
+                              <p className="font-mono text-gray-900">
+                                {maskEmail(ticket.email)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Recebido em{' '}
+                                {new Date(ticket.created_at).toLocaleString('pt-BR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-xs uppercase tracking-wide text-red-600 font-semibold">
+                            {ticket.status}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchQueueList}
+                    disabled={queueListLoading}
+                    className="border-red-200 text-red-700 hover:bg-red-50"
+                  >
+                    Atualizar agora
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Footer Info */}
           <div className="mt-6 sm:mt-8 text-center text-gray-600 text-xs sm:text-sm space-y-3 sm:space-y-4 px-2">

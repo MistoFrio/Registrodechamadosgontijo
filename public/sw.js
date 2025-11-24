@@ -34,6 +34,11 @@ self.addEventListener('activate', (event) => {
 // Interceptar requisições
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Ignora assets internos do Next.js para evitar servir bundles desatualizados.
+  if (url.pathname.startsWith('/_next/')) {
+    return fetch(event.request);
+  }
   
   // Não fazer cache de requisições de API (Supabase, etc)
   if (url.pathname.startsWith('/rest/v1/') || 
