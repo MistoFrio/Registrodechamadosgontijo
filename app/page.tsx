@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +40,7 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Garantir que só renderize no cliente
   useEffect(() => {
@@ -90,6 +91,13 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Proteção contra duplo submit
+    if (isSubmittingRef.current || loading) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setLoading(true);
     setSuccess(false);
     setError('');
@@ -98,6 +106,7 @@ export default function Home() {
     if (!email || !description) {
       setError('Por favor, preencha todos os campos');
       setLoading(false);
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -106,6 +115,7 @@ export default function Home() {
     if (!emailRegex.test(email)) {
       setError('Por favor, informe um email válido');
       setLoading(false);
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -130,6 +140,9 @@ export default function Home() {
       setEmail('');
       setDescription('');
 
+      // Atualizar a fila imediatamente
+      fetchQueueList();
+
       // Limpar mensagem de sucesso após 5 segundos
       setTimeout(() => setSuccess(false), 5000);
     } catch (err: any) {
@@ -137,6 +150,7 @@ export default function Home() {
       setError('Erro ao enviar chamado. Por favor, tente novamente.');
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
