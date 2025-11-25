@@ -1,5 +1,5 @@
 // Service Worker para PWA
-const CACHE_NAME = 'chamados-v1';
+const CACHE_NAME = 'chamados-v2';
 const urlsToCache = [
   '/',
   '/admin',
