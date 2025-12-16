@@ -41,6 +41,7 @@ export default function Home() {
   const [showTooltip, setShowTooltip] = useState(false);
   const [mounted, setMounted] = useState(false);
   const isSubmittingRef = useRef(false);
+  const lastSubmitTimeRef = useRef<number>(0);
 
   // Garantir que só renderize no cliente
   useEffect(() => {
@@ -74,7 +75,12 @@ export default function Home() {
         throw fetchError;
       }
 
-      setQueueList(data || []);
+      // Remover duplicados baseado no ID (caso existam)
+      const uniqueTickets = data ? Array.from(
+        new Map(data.map(ticket => [ticket.id, ticket])).values()
+      ) : [];
+
+      setQueueList(uniqueTickets);
     } catch (err) {
       console.error('Erro ao carregar fila:', err);
       setQueueListError('Não foi possível carregar a fila no momento.');
@@ -91,12 +97,20 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     
-    // Proteção contra duplo submit
-    if (isSubmittingRef.current || loading) {
+    // Proteção robusta contra duplo submit
+    const now = Date.now();
+    const timeSinceLastSubmit = now - lastSubmitTimeRef.current;
+    
+    // Bloquear se já está processando OU se foi submetido há menos de 2 segundos
+    if (isSubmittingRef.current || loading || timeSinceLastSubmit < 2000) {
+      console.log('Submit bloqueado - já em processamento ou muito recente');
       return;
     }
 
+    // Marcar tempo do submit e como submetendo ANTES de qualquer coisa
+    lastSubmitTimeRef.current = now;
     isSubmittingRef.current = true;
     setLoading(true);
     setSuccess(false);
@@ -120,19 +134,25 @@ export default function Home() {
     }
 
     try {
-      // Inserir chamado no Supabase
-      const { error: insertError } = await supabase()
+      // Inserir chamado no Supabase - apenas UMA vez
+      const { data, error: insertError } = await supabase()
         .from('tickets')
         .insert([
           {
-            email: email,
-            description: description,
+            email: email.trim(),
+            description: description.trim(),
             status: 'aberto'
           }
-        ]);
+        ])
+        .select();
 
       if (insertError) {
         throw insertError;
+      }
+
+      // Verificar se realmente foi inserido apenas um registro
+      if (data && data.length > 1) {
+        console.warn('Múltiplos registros inseridos:', data.length);
       }
 
       // Sucesso
@@ -141,7 +161,7 @@ export default function Home() {
       setDescription('');
 
       // Atualizar a fila imediatamente
-      fetchQueueList();
+      await fetchQueueList();
 
       // Limpar mensagem de sucesso após 5 segundos
       setTimeout(() => setSuccess(false), 5000);
@@ -150,7 +170,10 @@ export default function Home() {
       setError('Erro ao enviar chamado. Por favor, tente novamente.');
     } finally {
       setLoading(false);
-      isSubmittingRef.current = false;
+      // Aguardar um pouco antes de permitir novo submit
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 1000);
     }
   };
 
@@ -458,7 +481,16 @@ export default function Home() {
                 </Alert>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form 
+                onSubmit={handleSubmit} 
+                className="space-y-6"
+                onKeyDown={(e) => {
+                  // Prevenir submit duplo com Enter
+                  if (e.key === 'Enter' && (loading || isSubmittingRef.current)) {
+                    e.preventDefault();
+                  }
+                }}
+              >
                 {/* Email Field */}
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-gray-700 font-medium">
@@ -568,8 +600,15 @@ export default function Home() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  className="w-full bg-red-600 hover:bg-red-700 text-white py-4 sm:py-6 text-base sm:text-lg font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
-                  disabled={loading}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white py-4 sm:py-6 text-base sm:text-lg font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={loading || isSubmittingRef.current}
+                  onClick={(e) => {
+                    // Proteção adicional no clique
+                    if (loading || isSubmittingRef.current) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
                 >
                   {loading ? (
                     <>
