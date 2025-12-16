@@ -90,7 +90,12 @@ export default function AdminPage() {
         throw fetchError;
       }
 
-      setTickets(data || []);
+      // Remover duplicados baseado no ID (caso existam)
+      const uniqueTickets = data ? Array.from(
+        new Map(data.map(ticket => [ticket.id, ticket])).values()
+      ) : [];
+
+      setTickets(uniqueTickets);
     } catch (err: any) {
       console.error('Erro ao carregar tickets:', err);
       setError('Erro ao carregar tickets. Por favor, tente novamente.');

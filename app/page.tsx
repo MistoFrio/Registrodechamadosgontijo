@@ -103,8 +103,8 @@ export default function Home() {
     const now = Date.now();
     const timeSinceLastSubmit = now - lastSubmitTimeRef.current;
     
-    // Bloquear se já está processando OU se foi submetido há menos de 2 segundos
-    if (isSubmittingRef.current || loading || timeSinceLastSubmit < 2000) {
+    // Bloquear se já está processando OU se foi submetido há menos de 3 segundos
+    if (isSubmittingRef.current || loading || timeSinceLastSubmit < 3000) {
       console.log('Submit bloqueado - já em processamento ou muito recente');
       return;
     }
@@ -117,7 +117,10 @@ export default function Home() {
     setError('');
 
     // Validação básica
-    if (!email || !description) {
+    const trimmedEmail = email.trim();
+    const trimmedDescription = description.trim();
+    
+    if (!trimmedEmail || !trimmedDescription) {
       setError('Por favor, preencha todos os campos');
       setLoading(false);
       isSubmittingRef.current = false;
@@ -126,7 +129,7 @@ export default function Home() {
 
     // Validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(trimmedEmail)) {
       setError('Por favor, informe um email válido');
       setLoading(false);
       isSubmittingRef.current = false;
@@ -134,13 +137,33 @@ export default function Home() {
     }
 
     try {
+      // Verificar se já existe um chamado idêntico criado nos últimos 5 segundos
+      // Isso previne duplicações acidentais
+      const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
+      const { data: recentTickets } = await supabase()
+        .from('tickets')
+        .select('id')
+        .eq('email', trimmedEmail)
+        .eq('description', trimmedDescription)
+        .eq('status', 'aberto')
+        .gte('created_at', fiveSecondsAgo)
+        .limit(1);
+
+      if (recentTickets && recentTickets.length > 0) {
+        console.warn('Chamado duplicado detectado - evitando inserção');
+        setError('Um chamado idêntico foi criado recentemente. Aguarde alguns segundos antes de tentar novamente.');
+        setLoading(false);
+        isSubmittingRef.current = false;
+        return;
+      }
+
       // Inserir chamado no Supabase - apenas UMA vez
       const { data, error: insertError } = await supabase()
         .from('tickets')
         .insert([
           {
-            email: email.trim(),
-            description: description.trim(),
+            email: trimmedEmail,
+            description: trimmedDescription,
             status: 'aberto'
           }
         ])
@@ -153,6 +176,14 @@ export default function Home() {
       // Verificar se realmente foi inserido apenas um registro
       if (data && data.length > 1) {
         console.warn('Múltiplos registros inseridos:', data.length);
+        // Se por algum motivo múltiplos registros foram inseridos, deletar os extras
+        if (data.length > 1) {
+          const idsToDelete = data.slice(1).map(t => t.id);
+          await supabase()
+            .from('tickets')
+            .delete()
+            .in('id', idsToDelete);
+        }
       }
 
       // Sucesso
@@ -170,10 +201,10 @@ export default function Home() {
       setError('Erro ao enviar chamado. Por favor, tente novamente.');
     } finally {
       setLoading(false);
-      // Aguardar um pouco antes de permitir novo submit
+      // Aguardar mais tempo antes de permitir novo submit
       setTimeout(() => {
         isSubmittingRef.current = false;
-      }, 1000);
+      }, 2000);
     }
   };
 
