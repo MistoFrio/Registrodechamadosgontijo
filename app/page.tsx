@@ -118,8 +118,8 @@ export default function Home() {
     const now = Date.now();
     const timeSinceLastSubmit = now - lastSubmitTimeRef.current;
     
-    // Bloquear se já está processando OU se foi submetido há menos de 5 segundos
-    if (isSubmittingRef.current || loading || timeSinceLastSubmit < 5000) {
+    // Bloquear se já está processando OU se foi submetido há menos de 8 segundos
+    if (isSubmittingRef.current || loading || timeSinceLastSubmit < 8000) {
       console.log('Submit bloqueado - já em processamento ou muito recente');
       return;
     }
@@ -172,27 +172,27 @@ export default function Home() {
     setError('');
 
     try {
-      // Verificar se já existe um chamado idêntico criado nos últimos 10 segundos
+      // Verificar se já existe um chamado idêntico criado nos últimos 15 segundos
       // Isso previne duplicações acidentais mesmo com race conditions
-      const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+      const fifteenSecondsAgo = new Date(Date.now() - 15000).toISOString();
       const { data: recentTickets, error: checkError } = await supabase()
         .from('tickets')
         .select('id, created_at')
         .eq('email', trimmedEmail.toLowerCase())
         .eq('description', trimmedDescription)
         .eq('status', 'aberto')
-        .gte('created_at', tenSecondsAgo)
+        .gte('created_at', fifteenSecondsAgo)
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(10);
 
       if (checkError) {
         console.error('Erro ao verificar duplicados:', checkError);
         // Continuar mesmo com erro na verificação
       } else if (recentTickets && recentTickets.length > 0) {
-        // Verificar se há duplicados muito recentes (últimos 3 segundos)
+        // Verificar se há duplicados muito recentes (últimos 5 segundos)
         const veryRecent = recentTickets.filter(ticket => {
           const ticketTime = new Date(ticket.created_at).getTime();
-          return (now - ticketTime) < 3000;
+          return (now - ticketTime) < 5000;
         });
         
         if (veryRecent.length > 0) {
