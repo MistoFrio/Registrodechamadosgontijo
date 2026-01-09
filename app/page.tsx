@@ -42,6 +42,8 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const isSubmittingRef = useRef(false);
   const lastSubmitTimeRef = useRef<number>(0);
+  const submitIdRef = useRef<string | null>(null);
+  const submittedHashesRef = useRef<Set<string>>(new Set());
 
   // Garantir que só renderize no cliente
   useEffect(() => {
@@ -95,6 +97,19 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fetchQueueList]);
 
+  // Função para gerar hash único do submit
+  const generateSubmitHash = (email: string, description: string): string => {
+    const normalized = `${email.toLowerCase().trim()}|${description.trim()}`;
+    // Usar um hash simples baseado no conteúdo
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i++) {
+      const char = normalized.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return `${hash}_${Date.now()}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -103,27 +118,18 @@ export default function Home() {
     const now = Date.now();
     const timeSinceLastSubmit = now - lastSubmitTimeRef.current;
     
-    // Bloquear se já está processando OU se foi submetido há menos de 3 segundos
-    if (isSubmittingRef.current || loading || timeSinceLastSubmit < 3000) {
+    // Bloquear se já está processando OU se foi submetido há menos de 5 segundos
+    if (isSubmittingRef.current || loading || timeSinceLastSubmit < 5000) {
       console.log('Submit bloqueado - já em processamento ou muito recente');
       return;
     }
 
-    // Marcar tempo do submit e como submetendo ANTES de qualquer coisa
-    lastSubmitTimeRef.current = now;
-    isSubmittingRef.current = true;
-    setLoading(true);
-    setSuccess(false);
-    setError('');
-
-    // Validação básica
+    // Validação básica ANTES de marcar como submetendo
     const trimmedEmail = email.trim();
     const trimmedDescription = description.trim();
     
     if (!trimmedEmail || !trimmedDescription) {
       setError('Por favor, preencha todos os campos');
-      setLoading(false);
-      isSubmittingRef.current = false;
       return;
     }
 
@@ -131,30 +137,72 @@ export default function Home() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
       setError('Por favor, informe um email válido');
-      setLoading(false);
-      isSubmittingRef.current = false;
       return;
     }
 
+    // Gerar hash único para este submit
+    const submitHash = generateSubmitHash(trimmedEmail, trimmedDescription);
+    
+    // Verificar se este hash já foi submetido recentemente (últimos 10 segundos)
+    const recentHashes = Array.from(submittedHashesRef.current).filter(hash => {
+      const timestamp = parseInt(hash.split('_')[1] || '0');
+      return (now - timestamp) < 10000; // 10 segundos
+    });
+    
+    // Limpar hashes antigos
+    submittedHashesRef.current = new Set(recentHashes);
+    
+    // Verificar se este submit específico já foi processado
+    const hashKey = submitHash.split('_')[0];
+    const isDuplicate = Array.from(submittedHashesRef.current).some(h => h.startsWith(hashKey));
+    
+    if (isDuplicate) {
+      console.warn('Submit duplicado detectado pelo hash');
+      setError('Este chamado já está sendo processado. Aguarde alguns segundos.');
+      return;
+    }
+
+    // Marcar tempo do submit e como submetendo ANTES de qualquer coisa
+    lastSubmitTimeRef.current = now;
+    isSubmittingRef.current = true;
+    submitIdRef.current = submitHash;
+    submittedHashesRef.current.add(submitHash);
+    setLoading(true);
+    setSuccess(false);
+    setError('');
+
     try {
-      // Verificar se já existe um chamado idêntico criado nos últimos 5 segundos
-      // Isso previne duplicações acidentais
-      const fiveSecondsAgo = new Date(Date.now() - 5000).toISOString();
-      const { data: recentTickets } = await supabase()
+      // Verificar se já existe um chamado idêntico criado nos últimos 10 segundos
+      // Isso previne duplicações acidentais mesmo com race conditions
+      const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+      const { data: recentTickets, error: checkError } = await supabase()
         .from('tickets')
-        .select('id')
-        .eq('email', trimmedEmail)
+        .select('id, created_at')
+        .eq('email', trimmedEmail.toLowerCase())
         .eq('description', trimmedDescription)
         .eq('status', 'aberto')
-        .gte('created_at', fiveSecondsAgo)
-        .limit(1);
+        .gte('created_at', tenSecondsAgo)
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-      if (recentTickets && recentTickets.length > 0) {
-        console.warn('Chamado duplicado detectado - evitando inserção');
-        setError('Um chamado idêntico foi criado recentemente. Aguarde alguns segundos antes de tentar novamente.');
-        setLoading(false);
-        isSubmittingRef.current = false;
-        return;
+      if (checkError) {
+        console.error('Erro ao verificar duplicados:', checkError);
+        // Continuar mesmo com erro na verificação
+      } else if (recentTickets && recentTickets.length > 0) {
+        // Verificar se há duplicados muito recentes (últimos 3 segundos)
+        const veryRecent = recentTickets.filter(ticket => {
+          const ticketTime = new Date(ticket.created_at).getTime();
+          return (now - ticketTime) < 3000;
+        });
+        
+        if (veryRecent.length > 0) {
+          console.warn('Chamado duplicado detectado - evitando inserção');
+          setError('Um chamado idêntico foi criado recentemente. Aguarde alguns segundos antes de tentar novamente.');
+          setLoading(false);
+          isSubmittingRef.current = false;
+          submitIdRef.current = null;
+          return;
+        }
       }
 
       // Inserir chamado no Supabase - apenas UMA vez
@@ -162,7 +210,7 @@ export default function Home() {
         .from('tickets')
         .insert([
           {
-            email: trimmedEmail,
+            email: trimmedEmail.toLowerCase(),
             description: trimmedDescription,
             status: 'aberto'
           }
@@ -170,41 +218,51 @@ export default function Home() {
         .select();
 
       if (insertError) {
-        throw insertError;
-      }
-
-      // Verificar se realmente foi inserido apenas um registro
-      if (data && data.length > 1) {
-        console.warn('Múltiplos registros inseridos:', data.length);
-        // Se por algum motivo múltiplos registros foram inseridos, deletar os extras
+        // Se o erro for de constraint única ou duplicado, tratar como sucesso
+        if (insertError.code === '23505' || insertError.message.includes('duplicate') || insertError.message.includes('unique')) {
+          console.warn('Chamado duplicado bloqueado pelo banco de dados');
+          setError('Este chamado já foi criado. Verifique a fila.');
+        } else {
+          throw insertError;
+        }
+      } else if (data && data.length > 0) {
+        // Verificar se realmente foi inserido apenas um registro
         if (data.length > 1) {
+          console.warn('Múltiplos registros inseridos:', data.length);
+          // Se por algum motivo múltiplos registros foram inseridos, deletar os extras
           const idsToDelete = data.slice(1).map(t => t.id);
           await supabase()
             .from('tickets')
             .delete()
             .in('id', idsToDelete);
         }
+
+        // Sucesso
+        setSuccess(true);
+        setEmail('');
+        setDescription('');
+
+        // Atualizar a fila imediatamente
+        await fetchQueueList();
+
+        // Limpar mensagem de sucesso após 5 segundos
+        setTimeout(() => setSuccess(false), 5000);
       }
-
-      // Sucesso
-      setSuccess(true);
-      setEmail('');
-      setDescription('');
-
-      // Atualizar a fila imediatamente
-      await fetchQueueList();
-
-      // Limpar mensagem de sucesso após 5 segundos
-      setTimeout(() => setSuccess(false), 5000);
     } catch (err: any) {
       console.error('Erro ao criar chamado:', err);
-      setError('Erro ao enviar chamado. Por favor, tente novamente.');
+      // Se o erro for de duplicado, mostrar mensagem amigável
+      if (err.code === '23505' || err.message?.includes('duplicate') || err.message?.includes('unique')) {
+        setError('Este chamado já foi criado recentemente. Verifique a fila.');
+      } else {
+        setError('Erro ao enviar chamado. Por favor, tente novamente.');
+      }
     } finally {
       setLoading(false);
       // Aguardar mais tempo antes de permitir novo submit
       setTimeout(() => {
         isSubmittingRef.current = false;
-      }, 2000);
+        submitIdRef.current = null;
+      }, 3000);
     }
   };
 
