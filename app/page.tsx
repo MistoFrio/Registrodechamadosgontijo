@@ -218,12 +218,22 @@ export default function Home() {
         .select();
 
       if (insertError) {
-        // Se o erro for de constraint única ou duplicado, tratar como sucesso
-        if (insertError.code === '23505' || insertError.message.includes('duplicate') || insertError.message.includes('unique')) {
-          console.warn('Chamado duplicado bloqueado pelo banco de dados');
-          setError('Este chamado já foi criado. Verifique a fila.');
+        // Se o erro for de constraint única ou duplicado, tratar como informação (não erro)
+        if (insertError.code === '23505' || 
+            insertError.message?.includes('duplicate') || 
+            insertError.message?.includes('unique') ||
+            insertError.message?.includes('recentemente')) {
+          // Chamado duplicado - não é um erro, apenas informar
+          setSuccess(true);
+          setEmail('');
+          setDescription('');
+          await fetchQueueList();
+          setTimeout(() => setSuccess(false), 5000);
+          return;
         } else {
-          throw insertError;
+          // Erro real - apenas logar, não mostrar mensagem genérica
+          console.error('Erro ao criar chamado:', insertError);
+          setError('Não foi possível criar o chamado no momento. Tente novamente em alguns instantes.');
         }
       } else if (data && data.length > 0) {
         // Verificar se realmente foi inserido apenas um registro
@@ -249,12 +259,21 @@ export default function Home() {
         setTimeout(() => setSuccess(false), 5000);
       }
     } catch (err: any) {
-      console.error('Erro ao criar chamado:', err);
-      // Se o erro for de duplicado, mostrar mensagem amigável
-      if (err.code === '23505' || err.message?.includes('duplicate') || err.message?.includes('unique')) {
-        setError('Este chamado já foi criado recentemente. Verifique a fila.');
+      // Apenas logar erros inesperados, não mostrar mensagem genérica
+      console.error('Erro inesperado ao criar chamado:', err);
+      // Se o erro for de duplicado, tratar como sucesso
+      if (err.code === '23505' || 
+          err.message?.includes('duplicate') || 
+          err.message?.includes('unique') ||
+          err.message?.includes('recentemente')) {
+        setSuccess(true);
+        setEmail('');
+        setDescription('');
+        await fetchQueueList();
+        setTimeout(() => setSuccess(false), 5000);
       } else {
-        setError('Erro ao enviar chamado. Por favor, tente novamente.');
+        // Apenas mostrar erro para problemas reais de conexão/servidor
+        setError('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.');
       }
     } finally {
       setLoading(false);
