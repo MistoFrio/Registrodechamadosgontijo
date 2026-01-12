@@ -16,10 +16,34 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Função auxiliar para usar sessionStorage com fallback
+  const getSessionStorage = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return sessionStorage.getItem(key);
+    } catch (error) {
+      // Chrome pode bloquear sessionStorage em modo incógnito ou com políticas restritivas
+      console.warn('sessionStorage não disponível:', error);
+      return null;
+    }
+  };
+
+  const setSessionStorage = (key: string, value: string): boolean => {
+    if (typeof window === 'undefined') return false;
+    try {
+      sessionStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      // Chrome pode bloquear sessionStorage em modo incógnito ou com políticas restritivas
+      console.warn('Não foi possível salvar em sessionStorage:', error);
+      return false;
+    }
+  };
+
   // Verificar se já está autenticado
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const isAuthenticated = sessionStorage.getItem('admin_authenticated');
+      const isAuthenticated = getSessionStorage('admin_authenticated');
       if (isAuthenticated === 'true') {
         router.push('/admin');
       }
@@ -38,11 +62,16 @@ export default function AdminLoginPage() {
     // Validar credenciais
     if (username.trim() === adminUsername && password === adminPassword) {
       // Salvar autenticação na sessão
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('admin_authenticated', 'true');
-        sessionStorage.setItem('admin_username', username);
-        router.push('/admin');
+      const saved = setSessionStorage('admin_authenticated', 'true');
+      setSessionStorage('admin_username', username);
+      
+      if (!saved) {
+        // Se não conseguir salvar no sessionStorage, ainda permite o acesso
+        // mas o usuário precisará fazer login novamente ao recarregar
+        console.warn('Aviso: sessionStorage não disponível. A sessão pode não persistir.');
       }
+      
+      router.push('/admin');
     } else {
       setError('Usuário ou senha incorretos');
       setLoading(false);

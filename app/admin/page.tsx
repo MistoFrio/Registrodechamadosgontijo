@@ -52,10 +52,31 @@ export default function AdminPage() {
   const [kbForm, setKbForm] = useState({ question: '', answer: '', category: 'geral', keywords: '' });
   const [kbSearch, setKbSearch] = useState('');
 
+  // Função auxiliar para usar sessionStorage com fallback
+  const getSessionStorage = (key: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return sessionStorage.getItem(key);
+    } catch (error) {
+      // Chrome pode bloquear sessionStorage em modo incógnito ou com políticas restritivas
+      console.warn('sessionStorage não disponível:', error);
+      return null;
+    }
+  };
+
+  const removeSessionStorage = (key: string): void => {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.removeItem(key);
+    } catch (error) {
+      console.warn('Não foi possível remover do sessionStorage:', error);
+    }
+  };
+
   // Verificar autenticação
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const authStatus = sessionStorage.getItem('admin_authenticated');
+      const authStatus = getSessionStorage('admin_authenticated');
       if (authStatus === 'true') {
         setIsAuthenticated(true);
       } else {
@@ -68,8 +89,8 @@ export default function AdminPage() {
   // Função de logout
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('admin_authenticated');
-      sessionStorage.removeItem('admin_username');
+      removeSessionStorage('admin_authenticated');
+      removeSessionStorage('admin_username');
       router.push('/admin/login');
     }
   };

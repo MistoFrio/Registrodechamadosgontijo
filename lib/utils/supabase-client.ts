@@ -10,9 +10,31 @@ export const getSupabaseClient = () => {
   }
 
   if (!supabaseInstance) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+    // Verificar se as variáveis de ambiente estão configuradas
+    if (!supabaseUrl || !supabaseAnonKey || 
+        supabaseUrl === 'https://placeholder.supabase.co' || 
+        supabaseAnonKey === 'placeholder-anon-key') {
+      console.error('⚠️ Variáveis de ambiente do Supabase não configuradas!');
+      console.error('Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY');
+      
+      // Retornar cliente com valores placeholder para evitar erros
+      // mas o sistema não funcionará até as variáveis serem configuradas
+      supabaseInstance = createClient(
+        supabaseUrl || 'https://placeholder.supabase.co',
+        supabaseAnonKey || 'placeholder-anon-key'
+      );
+    } else {
+      supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true
+        }
+      });
+    }
   }
 
   return supabaseInstance;

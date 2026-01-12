@@ -63,6 +63,24 @@ export default function Home() {
     registerServiceWorker();
   }, []);
 
+  // Efeito para garantir que mensagem de sucesso seja sempre visível quando definida
+  useEffect(() => {
+    if (success) {
+      // Garantir que erro está limpo quando sucesso é exibido
+      setError('');
+      
+      // Scroll suave para a mensagem de sucesso após um pequeno delay
+      const scrollTimer = setTimeout(() => {
+        const successAlert = document.querySelector('[data-success-alert]');
+        if (successAlert) {
+          successAlert.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+
+      return () => clearTimeout(scrollTimer);
+    }
+  }, [success]);
+
   const fetchQueueList = useCallback(async () => {
     setQueueListLoading(true);
     setQueueListError('');
@@ -168,8 +186,8 @@ export default function Home() {
     submitIdRef.current = submitHash;
     submittedHashesRef.current.add(submitHash);
     setLoading(true);
-    setSuccess(false);
-    setError('');
+    setSuccess(false); // Garantir que sucesso está desligado no início
+    setError(''); // Limpar erros anteriores
 
     try {
       // Verificar se já existe um chamado idêntico criado nos últimos 15 segundos
@@ -224,15 +242,18 @@ export default function Home() {
             insertError.message?.includes('unique') ||
             insertError.message?.includes('recentemente')) {
           // Chamado duplicado - não é um erro, apenas informar
+          setError(''); // Limpar qualquer erro anterior
           setSuccess(true);
           setEmail('');
           setDescription('');
           await fetchQueueList();
-          setTimeout(() => setSuccess(false), 5000);
+          // Manter mensagem de sucesso por mais tempo
+          setTimeout(() => setSuccess(false), 8000);
           return;
         } else {
           // Erro real - apenas logar, não mostrar mensagem genérica
           console.error('Erro ao criar chamado:', insertError);
+          setSuccess(false); // Garantir que sucesso está desligado
           setError('Não foi possível criar o chamado no momento. Tente novamente em alguns instantes.');
         }
       } else if (data && data.length > 0) {
@@ -247,7 +268,8 @@ export default function Home() {
             .in('id', idsToDelete);
         }
 
-        // Sucesso
+        // Sucesso - garantir que erro está limpo
+        setError(''); // Limpar qualquer erro anterior
         setSuccess(true);
         setEmail('');
         setDescription('');
@@ -255,8 +277,24 @@ export default function Home() {
         // Atualizar a fila imediatamente
         await fetchQueueList();
 
-        // Limpar mensagem de sucesso após 5 segundos
-        setTimeout(() => setSuccess(false), 5000);
+        // Scroll para o topo do formulário para mostrar mensagem de sucesso
+        setTimeout(() => {
+          const formCard = document.querySelector('[data-form-card]');
+          if (formCard) {
+            formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+
+        // Manter mensagem de sucesso por mais tempo (8 segundos)
+        setTimeout(() => setSuccess(false), 8000);
+      } else {
+        // Caso não tenha dados retornados mas também não tenha erro
+        setError(''); // Limpar qualquer erro anterior
+        setSuccess(true);
+        setEmail('');
+        setDescription('');
+        await fetchQueueList();
+        setTimeout(() => setSuccess(false), 8000);
       }
     } catch (err: any) {
       // Apenas logar erros inesperados, não mostrar mensagem genérica
@@ -266,13 +304,22 @@ export default function Home() {
           err.message?.includes('duplicate') || 
           err.message?.includes('unique') ||
           err.message?.includes('recentemente')) {
+        setError(''); // Limpar qualquer erro anterior
         setSuccess(true);
         setEmail('');
         setDescription('');
         await fetchQueueList();
-        setTimeout(() => setSuccess(false), 5000);
+        // Scroll para mostrar mensagem de sucesso
+        setTimeout(() => {
+          const formCard = document.querySelector('[data-form-card]');
+          if (formCard) {
+            formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+        setTimeout(() => setSuccess(false), 8000);
       } else {
         // Apenas mostrar erro para problemas reais de conexão/servidor
+        setSuccess(false); // Garantir que sucesso está desligado
         setError('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.');
       }
     } finally {
@@ -305,6 +352,11 @@ export default function Home() {
     setShowAiAssistant(true);
 
     try {
+      // Verificar se fetch está disponível (compatibilidade com navegadores antigos)
+      if (typeof fetch === 'undefined') {
+        throw new Error('Seu navegador não suporta esta funcionalidade. Por favor, atualize seu navegador.');
+      }
+
       const response = await fetch('/api/ai-assistant', {
         method: 'POST',
         headers: {
@@ -312,6 +364,17 @@ export default function Home() {
         },
         body: JSON.stringify({ description }),
       });
+
+      // Verificar se a resposta é válida
+      if (!response) {
+        throw new Error('Não foi possível conectar ao servidor');
+      }
+
+      // Verificar se a resposta é JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Resposta inválida do servidor');
+      }
 
       const data = await response.json();
 
@@ -323,7 +386,19 @@ export default function Home() {
       setRequiresTicket(data.requiresTicket || false);
     } catch (err: any) {
       console.error('Erro ao consultar IA:', err);
-      setError('Erro ao consultar assistente de IA. Por favor, tente novamente ou abra um chamado diretamente.');
+      
+      // Mensagens de erro mais específicas
+      let errorMessage = 'Erro ao consultar assistente de IA. Por favor, tente novamente ou abra um chamado diretamente.';
+      
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+        errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+      } else if (err.message?.includes('navegador não suporta')) {
+        errorMessage = err.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
       setShowAiAssistant(false);
     } finally {
       setAiLoading(false);
@@ -344,6 +419,11 @@ export default function Home() {
     setChatLoading(true);
 
     try {
+      // Verificar se fetch está disponível
+      if (typeof fetch === 'undefined') {
+        throw new Error('Seu navegador não suporta esta funcionalidade.');
+      }
+
       const response = await fetch('/api/ai-assistant', {
         method: 'POST',
         headers: {
@@ -351,6 +431,15 @@ export default function Home() {
         },
         body: JSON.stringify({ description: userMessage }),
       });
+
+      if (!response) {
+        throw new Error('Não foi possível conectar ao servidor');
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Resposta inválida do servidor');
+      }
 
       const data = await response.json();
 
@@ -362,7 +451,16 @@ export default function Home() {
       setChatMessages([...newMessages, { role: 'assistant', content: data.response || 'Não foi possível obter resposta da IA.' }]);
     } catch (err: any) {
       console.error('Erro ao consultar IA:', err);
-      setChatMessages([...newMessages, { role: 'assistant', content: 'Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.' }]);
+      
+      let errorMessage = 'Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.';
+      
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+        errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setChatMessages([...newMessages, { role: 'assistant', content: errorMessage }]);
     } finally {
       setChatLoading(false);
     }
@@ -561,7 +659,7 @@ export default function Home() {
           </div>
 
           {/* Form Card */}
-          <Card className="shadow-xl border-red-100">
+          <Card className="shadow-xl border-red-100" data-form-card>
             <CardHeader className="bg-gradient-to-r from-red-600 to-red-700 text-white rounded-t-lg">
               <CardTitle className="text-xl sm:text-2xl">Abrir Novo Chamado</CardTitle>
               <CardDescription className="text-red-50 text-sm sm:text-base">
@@ -569,12 +667,18 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
-              {/* Success Alert */}
+              {/* Success Alert - Melhorado e mais visível */}
               {success && (
-                <Alert className="mb-6 border-green-200 bg-green-50">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <AlertDescription className="text-green-800">
-                    Chamado criado com sucesso! Nossa equipe entrará em contato em breve.
+                <Alert 
+                  data-success-alert
+                  className="mb-6 border-green-500 bg-green-50 shadow-lg animate-in fade-in slide-in-from-top-2 duration-300 ring-2 ring-green-200"
+                >
+                  <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 animate-pulse" />
+                  <AlertDescription className="text-green-900 font-semibold text-base">
+                    ✅ Chamado enviado com sucesso!
+                  </AlertDescription>
+                  <AlertDescription className="text-green-800 text-sm mt-1">
+                    Seu chamado foi registrado e nossa equipe entrará em contato em breve.
                   </AlertDescription>
                 </Alert>
               )}
@@ -609,7 +713,16 @@ export default function Home() {
                     type="email"
                     placeholder="seu.email@empresa.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      // Limpar mensagens quando o usuário começar a digitar novamente
+                      if (success) {
+                        setSuccess(false);
+                      }
+                      if (error) {
+                        setError('');
+                      }
+                    }}
                     className="border-gray-300 focus:border-red-500 focus:ring-red-500"
                     disabled={loading}
                     required
@@ -651,6 +764,13 @@ export default function Home() {
                     value={description}
                     onChange={(e) => {
                       setDescription(e.target.value);
+                      // Limpar mensagens quando o usuário começar a digitar novamente
+                      if (success) {
+                        setSuccess(false);
+                      }
+                      if (error) {
+                        setError('');
+                      }
                       if (showAiAssistant) {
                         setShowAiAssistant(false);
                         setAiResponse('');
